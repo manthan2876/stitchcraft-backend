@@ -127,3 +127,40 @@ export const getUserProfile = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+// @desc    Update user profile details & avatar (profile photo)
+// @route   PUT /api/auth/profile
+// @access  Private
+export const updateUserProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const { name, avatar } = req.body;
+
+    if (name) user.name = name;
+    if (avatar !== undefined) user.avatar = avatar; // can accept base64 string
+
+    const updatedUser = await user.save();
+    
+    // Populate shop details if linked
+    const populated = await User.findById(updatedUser._id).populate('shopId');
+
+    res.json({
+      _id: populated._id,
+      name: populated.name,
+      email: populated.email,
+      role: populated.role,
+      avatar: populated.avatar,
+      shopId: populated.shopId ? populated.shopId._id : null,
+      shopName: populated.shopId ? populated.shopId.shopName : '',
+    });
+  } catch (error) {
+    console.error('Update profile error:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
