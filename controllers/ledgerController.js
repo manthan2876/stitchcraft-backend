@@ -120,7 +120,7 @@ export const getJournalEntries = async (req, res) => {
         description: `Order Booked: ${o.orderId} - ${o.apparelType} (${o.customerName})`,
         amount: o.price + asterPrice,
         paymentMethod: 'N/A',
-        flow: 'In',
+        flow: 'None',
         category: 'Sales'
       };
     });
@@ -141,7 +141,7 @@ export const getJournalEntries = async (req, res) => {
             description: `Lining Consumed: ${o.asterQuantity} ${o.asterInventoryItem?.unit || 'units'} of ${o.asterInventoryItem?.itemName || 'Material'} for ${o.orderId}`,
             amount: totalCost,
             paymentMethod: 'N/A',
-            flow: 'Out',
+            flow: 'None',
             category: 'Material Cost'
           });
         }
