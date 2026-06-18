@@ -33,6 +33,16 @@ const inventorySchema = new mongoose.Schema(
       enum: ['In Stock', 'Low Stock', 'Out of Stock'],
       default: 'In Stock',
     },
+    lastPurchaseAmount: {
+      type: Number,
+      default: 0,
+    },
+    purchaseHistory: [
+      {
+        amount: { type: Number, default: 0 },
+        date: { type: Date, default: Date.now },
+      },
+    ],
   },
   {
     timestamps: true,

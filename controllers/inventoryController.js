@@ -1,4 +1,5 @@
 import Inventory from '../models/Inventory.js';
+import LedgerEntry from '../models/LedgerEntry.js';
 import mongoose from 'mongoose';
 
 // @desc    Create a new inventory item
@@ -6,19 +7,38 @@ import mongoose from 'mongoose';
 // @access  Private
 export const createInventoryItem = async (req, res) => {
   try {
-    const { itemName, quantity, unit, minQuantity } = req.body;
+    const { itemName, quantity, unit, minQuantity, purchaseAmount, description } = req.body;
 
     if (!itemName) {
       return res.status(400).json({ message: 'Item name is required' });
     }
 
-    const item = await Inventory.create({
+    const pAmount = purchaseAmount !== undefined ? Number(purchaseAmount) : 0;
+
+    const itemData = {
       shopId: req.user.shopId,
       itemName,
       quantity: quantity !== undefined ? Number(quantity) : 0,
       unit: unit || 'meters',
       minQuantity: minQuantity !== undefined ? Number(minQuantity) : 10,
-    });
+    };
+
+    if (pAmount > 0) {
+      itemData.lastPurchaseAmount = pAmount;
+      itemData.purchaseHistory = [{ amount: pAmount, date: new Date() }];
+    }
+
+    const item = await Inventory.create(itemData);
+
+    if (pAmount > 0) {
+      await LedgerEntry.create({
+        shopId: req.user.shopId,
+        amount: pAmount,
+        category: 'Inventory',
+        description: description || `Purchased ${quantity || 0} ${unit || 'meters'} of ${itemName}`,
+        referenceId: item._id,
+      });
+    }
 
     res.status(201).json(item);
   } catch (error) {
@@ -76,14 +96,31 @@ export const updateInventoryItem = async (req, res) => {
       return res.status(404).json({ message: 'Inventory item not found' });
     }
 
-    const { itemName, quantity, unit, minQuantity } = req.body;
+    const { itemName, quantity, unit, minQuantity, purchaseAmount, description } = req.body;
 
     if (itemName) item.itemName = itemName;
     if (quantity !== undefined) item.quantity = Number(quantity);
     if (unit) item.unit = unit;
     if (minQuantity !== undefined) item.minQuantity = Number(minQuantity);
 
+    const pAmount = purchaseAmount !== undefined ? Number(purchaseAmount) : 0;
+    if (pAmount > 0) {
+      item.lastPurchaseAmount = pAmount;
+      item.purchaseHistory.push({ amount: pAmount, date: new Date() });
+    }
+
     const updatedItem = await item.save();
+
+    if (pAmount > 0) {
+      await LedgerEntry.create({
+        shopId: req.user.shopId,
+        amount: pAmount,
+        category: 'Inventory',
+        description: description || `Restocked ${updatedItem.itemName}`,
+        referenceId: updatedItem._id,
+      });
+    }
+
     res.json(updatedItem);
   } catch (error) {
     console.error('Update inventory item error:', error);
