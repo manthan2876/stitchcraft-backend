@@ -46,6 +46,7 @@ import notificationRoutes from './routes/notificationRoutes.js';
 import karigarRoutes from './routes/karigarRoutes.js';
 import machineRoutes from './routes/machineRoutes.js';
 import inventoryRoutes from './routes/inventoryRoutes.js';
+import uploadRoutes from './routes/uploadRoutes.js';
 
 // Mount routes
 app.use('/api/auth', authRoutes);
@@ -59,6 +60,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/karigars', karigarRoutes);
 app.use('/api/machines', machineRoutes);
 app.use('/api/inventory', inventoryRoutes);
+app.use('/api/upload', uploadRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
