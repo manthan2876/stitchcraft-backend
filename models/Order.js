@@ -58,6 +58,10 @@ const orderSchema = new mongoose.Schema(
       ref: 'Inventory',
       default: null,
     },
+    asterSellingPrice: {
+      type: Number,
+      default: 0,
+    },
     asterDeducted: {
       type: Boolean,
       default: false,

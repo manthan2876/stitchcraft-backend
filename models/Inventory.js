@@ -37,6 +37,10 @@ const inventorySchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    costPerUnit: {
+      type: Number,
+      default: 0,
+    },
     purchaseHistory: [
       {
         amount: { type: Number, default: 0 },
