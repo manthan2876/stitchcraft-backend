@@ -40,6 +40,7 @@ import shopRoutes from './routes/shopRoutes.js';
 import customerRoutes from './routes/customerRoutes.js';
 import orderRoutes from './routes/orderRoutes.js';
 import ledgerRoutes from './routes/ledgerRoutes.js';
+import deliveryRoutes from './routes/deliveryRoutes.js';
 
 // Mount routes
 app.use('/api/auth', authRoutes);
@@ -48,6 +49,7 @@ app.use('/api/shops', shopRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/ledger', ledgerRoutes);
+app.use('/api/deliveries', deliveryRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
