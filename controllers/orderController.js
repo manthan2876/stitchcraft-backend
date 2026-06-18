@@ -4,7 +4,11 @@ import Payment from '../models/Payment.js';
 import Delivery from '../models/Delivery.js';
 import Notification from '../models/Notification.js';
 import Measurement from '../models/Measurement.js';
+import Inventory from '../models/Inventory.js';
 import mongoose from 'mongoose';
+
+// Statuses at which astar/lining is considered consumed (Stitching onwards)
+const ASTAR_DEDUCT_STATUSES = ['Stitching', 'Checking', 'Ready', 'Delivered'];
 
 // Helper to find order by ID or custom orderId, scoped to shopId
 const findOrderScoped = async (id, shopId) => {
@@ -32,7 +36,11 @@ export const createOrder = async (req, res) => {
       paymentType,
       measurements,
       needsAster,
+      asterQuantity,
+      asterInventoryItem,
       assignedKarigar,
+      measurementType,
+      maapImageUrl,
     } = req.body;
 
     if (!customerName || !apparelType || !deliveryDate || price === undefined) {
@@ -71,8 +79,8 @@ export const createOrder = async (req, res) => {
       await customerObj.save();
     }
 
-    // Save/update customer measurements if provided
-    if (measurements) {
+    // Save/update customer measurements only if measurementType is 'Measurements'
+    if (measurementType !== 'Maap' && measurements) {
       let measurementRecord = await Measurement.findOne({ customerId: customerObj._id });
       if (!measurementRecord) {
         measurementRecord = new Measurement({
@@ -110,6 +118,10 @@ export const createOrder = async (req, res) => {
       shopId: req.user.shopId,
       status: 'Incoming',
       needsAster: needsAster || false,
+      asterQuantity: needsAster ? (Number(asterQuantity) || 0) : 0,
+      asterInventoryItem: (needsAster && asterInventoryItem) ? asterInventoryItem : null,
+      measurementType: measurementType || 'Maap',
+      maapImageUrl: maapImageUrl || '',
       assignedKarigar: assignedKarigar || null,
     });
 
@@ -226,16 +238,14 @@ export const updateOrder = async (req, res) => {
       return res.status(404).json({ message: 'Order not found' });
     }
 
-    const { status, deliveryDate, price, fabric, needsAster, assignedKarigar } = req.body;
+    const { status, deliveryDate, price, fabric, needsAster, asterQuantity, asterInventoryItem, assignedKarigar, measurementType, maapImageUrl } = req.body;
 
     if (deliveryDate) {
       order.deliveryDate = deliveryDate;
-      // Sync with Delivery model
       await Delivery.updateOne({ orderId: order._id }, { deliveryDate });
     }
     if (price !== undefined) {
       order.price = price;
-      // Sync with Payment model
       const payment = await Payment.findOne({ orderId: order._id });
       if (payment) {
         payment.totalAmount = price;
@@ -244,12 +254,47 @@ export const updateOrder = async (req, res) => {
     }
     if (fabric !== undefined) order.fabric = fabric;
     if (needsAster !== undefined) order.needsAster = needsAster;
+    if (asterQuantity !== undefined) order.asterQuantity = Number(asterQuantity) || 0;
+    if (asterInventoryItem !== undefined) order.asterInventoryItem = asterInventoryItem || null;
+    if (measurementType !== undefined) order.measurementType = measurementType;
+    if (maapImageUrl !== undefined) order.maapImageUrl = maapImageUrl;
     if (assignedKarigar !== undefined) order.assignedKarigar = assignedKarigar || null;
 
     let statusChanged = false;
     let oldStatus = order.status;
-    if (status && status !== order.status) {
-      order.status = status;
+    const newStatus = status;
+
+    if (newStatus && newStatus !== order.status) {
+      // --- Astar inventory auto-deduction logic ---
+      const willDeduct = ASTAR_DEDUCT_STATUSES.includes(newStatus);
+      const wasDeducted = order.asterDeducted;
+
+      if (order.needsAster && order.asterQuantity > 0 && order.asterInventoryItem) {
+        if (willDeduct && !wasDeducted) {
+          // Deduct from inventory
+          const invItem = await Inventory.findOne({ _id: order.asterInventoryItem, shopId: req.user.shopId });
+          if (invItem) {
+            invItem.quantity = Math.max(0, invItem.quantity - order.asterQuantity);
+            await invItem.save();
+            order.asterDeducted = true;
+            await Notification.create({
+              shopId: req.user.shopId,
+              orderId: order._id,
+              message: `Astar stock reduced by ${order.asterQuantity} ${invItem.unit} for order ${order.orderId} (${invItem.itemName}).`,
+            });
+          }
+        } else if (!willDeduct && wasDeducted) {
+          // Re-add to inventory (status moved back)
+          const invItem = await Inventory.findOne({ _id: order.asterInventoryItem, shopId: req.user.shopId });
+          if (invItem) {
+            invItem.quantity = invItem.quantity + order.asterQuantity;
+            await invItem.save();
+            order.asterDeducted = false;
+          }
+        }
+      }
+
+      order.status = newStatus;
       statusChanged = true;
     }
 

@@ -47,6 +47,31 @@ const orderSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // Astar/lining inventory link
+    asterQuantity: {
+      type: Number,
+      default: 0,
+      min: [0, 'Astar quantity cannot be negative'],
+    },
+    asterInventoryItem: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Inventory',
+      default: null,
+    },
+    asterDeducted: {
+      type: Boolean,
+      default: false,
+    },
+    // Measurement type
+    measurementType: {
+      type: String,
+      enum: ['Maap', 'Measurements'],
+      default: 'Maap',
+    },
+    maapImageUrl: {
+      type: String,
+      default: '',
+    },
     assignedKarigar: {
       type: mongoose.Schema.Types.ObjectId,
       default: null,
