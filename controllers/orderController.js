@@ -22,7 +22,13 @@ const findOrderScoped = async (id, shopId) => {
     .populate('asterInventoryItem');
 };
 
-const syncPaymentFromTransactions = async (orderId, shopId, price) => {
+const syncPaymentFromTransactions = async (orderId, shopId) => {
+  const order = await Order.findById(orderId);
+  if (!order) return null;
+
+  const asterPrice = order.needsAster ? (order.asterSellingPrice * order.asterQuantity) : 0;
+  const totalOrderValue = order.price + asterPrice;
+
   const transactions = await Transaction.find({ orderId, shopId });
   const totalPaid = transactions.reduce((sum, tx) => {
     if (tx.type === 'Payment') return sum + tx.amount;
@@ -32,13 +38,15 @@ const syncPaymentFromTransactions = async (orderId, shopId, price) => {
 
   let payment = await Payment.findOne({ orderId, shopId });
   if (!payment) {
-    payment = new Payment({
-      shopId,
-      orderId,
-      totalAmount: price,
-    });
+    payment = new Payment({ orderId, shopId, totalAmount: totalOrderValue });
+  } else {
+    payment.totalAmount = totalOrderValue;
   }
+
   payment.paidAmount = totalPaid;
+  payment.balanceAmount = Math.max(0, payment.totalAmount - totalPaid);
+  payment.status = payment.balanceAmount === 0 ? 'Paid' : (totalPaid > 0 ? 'Partial' : 'Pending');
+
   await payment.save();
   return payment;
 };
@@ -178,7 +186,7 @@ export const createOrder = async (req, res) => {
     const payment = await Payment.create({
       shopId: req.user.shopId,
       orderId: order._id,
-      totalAmount: price,
+      totalAmount: price + (needsAster ? (Number(asterQuantity) * Number(asterSellingPrice)) : 0),
       paidAmount: advancePaid || 0,
       paymentType: paymentType || 'Cash',
     });
@@ -192,7 +200,7 @@ export const createOrder = async (req, res) => {
         paymentType: paymentType || 'Cash',
         type: 'Payment',
       });
-      await syncPaymentFromTransactions(order._id, req.user.shopId, price);
+      await syncPaymentFromTransactions(order._id, req.user.shopId);
     }
 
     // Create associated Delivery record
@@ -371,7 +379,6 @@ export const updateOrder = async (req, res) => {
     }
     if (price !== undefined) {
       order.price = price;
-      await syncPaymentFromTransactions(order._id, req.user.shopId, price);
     }
     if (fabric !== undefined) order.fabric = fabric;
     if (needsAster !== undefined) order.needsAster = needsAster;
@@ -422,6 +429,9 @@ export const updateOrder = async (req, res) => {
     }
 
     const updatedOrder = await order.save();
+
+    // Always sync payment details to keep totalAmount in sync with potential tailoring price / lining changes
+    await syncPaymentFromTransactions(order._id, req.user.shopId);
 
     // If status changed to Delivered, sync delivery collection and send alert
     if (statusChanged) {
@@ -487,7 +497,7 @@ export const recordOrderPayment = async (req, res) => {
     });
 
     // Dynamically calculate and sync payment records
-    const payment = await syncPaymentFromTransactions(order._id, req.user.shopId, order.price);
+    const payment = await syncPaymentFromTransactions(order._id, req.user.shopId);
 
     // Create Notification
     await Notification.create({

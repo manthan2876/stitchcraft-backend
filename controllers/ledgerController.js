@@ -2,6 +2,7 @@ import Payment from '../models/Payment.js';
 import Order from '../models/Order.js';
 import Transaction from '../models/Transaction.js';
 import LedgerEntry from '../models/LedgerEntry.js';
+import mongoose from 'mongoose';
 
 // @desc    Get payments summary (total sales, received payments, outstanding collections)
 // @route   GET /api/ledger/summary
@@ -13,6 +14,7 @@ export const getLedgerSummary = async (req, res) => {
     // Calculate totalSales from orders (including lining selling price)
     const orders = await Order.find({ shopId }).populate('asterInventoryItem');
     const totalSales = orders.reduce((sum, o) => {
+      if (o.status === 'Cancelled') return sum;
       const asterPrice = o.needsAster ? (o.asterSellingPrice * o.asterQuantity) : 0;
       return sum + (o.price || 0) + asterPrice;
     }, 0);
@@ -38,6 +40,7 @@ export const getLedgerSummary = async (req, res) => {
 
     const ASTAR_DEDUCT_STATUSES = ['Stitching', 'Checking', 'Ready', 'Delivered'];
     orders.forEach(o => {
+      if (o.status === 'Cancelled') return;
       if (o.needsAster) {
         const cost = o.asterInventoryItem?.costPerUnit || 0;
         const profit = (o.asterSellingPrice - cost) * o.asterQuantity;
@@ -112,16 +115,18 @@ export const getJournalEntries = async (req, res) => {
     const orders = await Order.find({ shopId }).populate('asterInventoryItem');
     const journalOrders = orders.map(o => {
       const asterPrice = o.needsAster ? (o.asterSellingPrice * o.asterQuantity) : 0;
+      const isReverted = o.status === 'Cancelled';
       return {
         _id: o._id,
         date: o.date,
         type: 'Sales',
         referenceId: o._id,
-        description: `Order Booked: ${o.orderId} - ${o.apparelType} (${o.customerName})`,
+        description: `${isReverted ? '[Reverted] ' : ''}Order Booked: ${o.orderId} - ${o.apparelType} (${o.customerName})`,
         amount: o.price + asterPrice,
         paymentMethod: 'N/A',
         flow: 'None',
-        category: 'Sales'
+        category: 'Sales',
+        isReverted: isReverted
       };
     });
 
@@ -129,6 +134,7 @@ export const getJournalEntries = async (req, res) => {
     const ASTAR_DEDUCT_STATUSES = ['Stitching', 'Checking', 'Ready', 'Delivered'];
     const journalConsumption = [];
     orders.forEach(o => {
+      if (o.status === 'Cancelled') return;
       if (o.needsAster && o.asterQuantity > 0 && ASTAR_DEDUCT_STATUSES.includes(o.status)) {
         const costPrice = o.asterInventoryItem?.costPerUnit || 0;
         const totalCost = costPrice * o.asterQuantity;
@@ -156,6 +162,27 @@ export const getJournalEntries = async (req, res) => {
       ...journalConsumption
     ];
 
+    // Sort chronologically ascending (oldest first) for stable running balance calculation
+    allEntries.sort((a, b) => {
+      const diff = new Date(a.date) - new Date(b.date);
+      if (diff !== 0) return diff;
+      return String(a._id).localeCompare(String(b._id));
+    });
+
+    // Compute cumulative running cash balance
+    let balance = 0;
+    allEntries = allEntries.map(entry => {
+      if (entry.flow === 'In') {
+        balance += entry.amount;
+      } else if (entry.flow === 'Out') {
+        balance -= entry.amount;
+      }
+      return {
+        ...entry,
+        runningBalance: balance
+      };
+    });
+
     // Filter by Category matching
     if (category && category !== 'All') {
       allEntries = allEntries.filter(entry => {
@@ -177,8 +204,12 @@ export const getJournalEntries = async (req, res) => {
       );
     }
 
-    // Sort descending chronologically
-    allEntries.sort((a, b) => new Date(b.date) - new Date(a.date));
+    // Sort descending chronologically (newest first) for representation
+    allEntries.sort((a, b) => {
+      const diff = new Date(b.date) - new Date(a.date);
+      if (diff !== 0) return diff;
+      return String(b._id).localeCompare(String(a._id));
+    });
 
     res.json(allEntries);
   } catch (error) {

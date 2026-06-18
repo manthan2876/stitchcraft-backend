@@ -7,7 +7,7 @@ import mongoose from 'mongoose';
 // @access  Private
 export const createInventoryItem = async (req, res) => {
   try {
-    const { itemName, quantity, unit, minQuantity, purchaseAmount, description } = req.body;
+    const { itemName, quantity, unit, minQuantity, purchaseAmount, description, costPerUnit } = req.body;
 
     if (!itemName) {
       return res.status(400).json({ message: 'Item name is required' });
@@ -21,6 +21,7 @@ export const createInventoryItem = async (req, res) => {
       quantity: quantity !== undefined ? Number(quantity) : 0,
       unit: unit || 'meters',
       minQuantity: minQuantity !== undefined ? Number(minQuantity) : 10,
+      costPerUnit: costPerUnit !== undefined ? Number(costPerUnit) : 0,
     };
 
     if (pAmount > 0) {
@@ -96,12 +97,13 @@ export const updateInventoryItem = async (req, res) => {
       return res.status(404).json({ message: 'Inventory item not found' });
     }
 
-    const { itemName, quantity, unit, minQuantity, purchaseAmount, description } = req.body;
+    const { itemName, quantity, unit, minQuantity, purchaseAmount, description, costPerUnit } = req.body;
 
     if (itemName) item.itemName = itemName;
     if (quantity !== undefined) item.quantity = Number(quantity);
     if (unit) item.unit = unit;
     if (minQuantity !== undefined) item.minQuantity = Number(minQuantity);
+    if (costPerUnit !== undefined) item.costPerUnit = Number(costPerUnit);
 
     const pAmount = purchaseAmount !== undefined ? Number(purchaseAmount) : 0;
     if (pAmount > 0) {
