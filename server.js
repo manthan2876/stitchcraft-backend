@@ -42,6 +42,7 @@ import orderRoutes from './routes/orderRoutes.js';
 import ledgerRoutes from './routes/ledgerRoutes.js';
 import deliveryRoutes from './routes/deliveryRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
+import karigarRoutes from './routes/karigarRoutes.js';
 
 // Mount routes
 app.use('/api/auth', authRoutes);
@@ -52,6 +53,7 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/ledger', ledgerRoutes);
 app.use('/api/deliveries', deliveryRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/karigars', karigarRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
