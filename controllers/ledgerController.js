@@ -29,11 +29,20 @@ export const getLedgerSummary = async (req, res) => {
     const expenses = await LedgerEntry.find({ shopId });
     const totalExpenses = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
 
+    // Calculate total fabric profit
+    const asterOrders = await Order.find({ shopId, needsAster: true }).populate('asterInventoryItem');
+    const totalFabricProfit = asterOrders.reduce((sum, o) => {
+      const cost = o.asterInventoryItem?.costPerUnit || 0;
+      const profit = (o.asterSellingPrice - cost) * o.asterQuantity;
+      return sum + (profit > 0 ? profit : 0);
+    }, 0);
+
     res.json({
       totalSales,
       totalReceived,
       totalOutstanding,
       totalExpenses,
+      totalFabricProfit,
     });
   } catch (error) {
     console.error('Get ledger summary error:', error);

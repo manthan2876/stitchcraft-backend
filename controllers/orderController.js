@@ -16,7 +16,10 @@ const findOrderScoped = async (id, shopId) => {
   const query = mongoose.Types.ObjectId.isValid(id)
     ? { _id: id, shopId }
     : { orderId: id, shopId };
-  return await Order.findOne(query).populate('assignedKarigar').populate('assignedMachine');
+  return await Order.findOne(query)
+    .populate('assignedKarigar')
+    .populate('assignedMachine')
+    .populate('asterInventoryItem');
 };
 
 const syncPaymentFromTransactions = async (orderId, shopId, price) => {
@@ -60,6 +63,7 @@ export const createOrder = async (req, res) => {
       needsAster,
       asterQuantity,
       asterInventoryItem,
+      asterSellingPrice,
       assignedKarigar,
       assignedMachine,
       measurementType,
@@ -162,6 +166,7 @@ export const createOrder = async (req, res) => {
       needsAster: needsAster || false,
       asterQuantity: needsAster ? (Number(asterQuantity) || 0) : 0,
       asterInventoryItem: (needsAster && asterInventoryItem) ? asterInventoryItem : null,
+      asterSellingPrice: needsAster ? (Number(asterSellingPrice) || 0) : 0,
       measurementType: measurementType || 'Maap',
       maapImageUrl: maapImageUrl || '',
       assignedKarigar: assignedKarigar || null,
@@ -283,12 +288,17 @@ export const getOrderById = async (req, res) => {
       (order.measurementsSnapshot.shirt || order.measurementsSnapshot.pant || order.measurementsSnapshot.others);
     const resolvedMeasurements = hasSnapshot ? order.measurementsSnapshot : measurements;
 
+    const costPrice = order.asterInventoryItem?.costPerUnit || 0;
+    const asterProfit = order.needsAster ? (order.asterSellingPrice - costPrice) * order.asterQuantity : 0;
+
     const result = order.toJSON();
     result.payment = payment;
     result.delivery = delivery;
     result.measurements = resolvedMeasurements;
     result.measurementsSnapshot = order.measurementsSnapshot || null;
     result.transactions = transactions;
+    result.asterProfit = asterProfit;
+    result.asterCostPrice = costPrice;
 
     res.json(result);
   } catch (error) {
@@ -308,7 +318,7 @@ export const updateOrder = async (req, res) => {
       return res.status(404).json({ message: 'Order not found' });
     }
 
-    const { status, deliveryDate, price, fabric, needsAster, asterQuantity, asterInventoryItem, assignedKarigar, assignedMachine, measurementType, maapImageUrl } = req.body;
+    const { status, deliveryDate, price, fabric, needsAster, asterQuantity, asterInventoryItem, asterSellingPrice, assignedKarigar, assignedMachine, measurementType, maapImageUrl } = req.body;
 
     if (deliveryDate) {
       order.deliveryDate = deliveryDate;
@@ -322,6 +332,7 @@ export const updateOrder = async (req, res) => {
     if (needsAster !== undefined) order.needsAster = needsAster;
     if (asterQuantity !== undefined) order.asterQuantity = Number(asterQuantity) || 0;
     if (asterInventoryItem !== undefined) order.asterInventoryItem = asterInventoryItem || null;
+    if (asterSellingPrice !== undefined) order.asterSellingPrice = Number(asterSellingPrice) || 0;
     if (measurementType !== undefined) order.measurementType = measurementType;
     if (maapImageUrl !== undefined) order.maapImageUrl = maapImageUrl;
     if (assignedKarigar !== undefined) order.assignedKarigar = assignedKarigar || null;
