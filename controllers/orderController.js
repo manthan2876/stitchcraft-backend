@@ -108,6 +108,25 @@ export const createOrder = async (req, res) => {
       await measurementRecord.save();
     }
 
+    // Prepare measurements snapshot
+    let measurementsSnapshot = null;
+    if (measurements) {
+      measurementsSnapshot = {
+        shirt: measurements.shirt || null,
+        pant: measurements.pant || null,
+        others: measurements.others || '',
+      };
+    } else {
+      const template = await Measurement.findOne({ customerId: customerObj._id });
+      if (template) {
+        measurementsSnapshot = {
+          shirt: template.shirt ? (typeof template.shirt.toObject === 'function' ? template.shirt.toObject() : template.shirt) : null,
+          pant: template.pant ? (typeof template.pant.toObject === 'function' ? template.pant.toObject() : template.pant) : null,
+          others: template.others || '',
+        };
+      }
+    }
+
     // Create Order
     const order = await Order.create({
       customerName: customerObj.name,
@@ -125,6 +144,7 @@ export const createOrder = async (req, res) => {
       maapImageUrl: maapImageUrl || '',
       assignedKarigar: assignedKarigar || null,
       assignedMachine: assignedMachine || null,
+      measurementsSnapshot,
     });
 
     // Create associated Payment record
@@ -224,10 +244,15 @@ export const getOrderById = async (req, res) => {
       ? await Measurement.findOne({ customerId: order.customer._id })
       : null;
 
+    const hasSnapshot = order.measurementsSnapshot && 
+      (order.measurementsSnapshot.shirt || order.measurementsSnapshot.pant || order.measurementsSnapshot.others);
+    const resolvedMeasurements = hasSnapshot ? order.measurementsSnapshot : measurements;
+
     const result = order.toJSON();
     result.payment = payment;
     result.delivery = delivery;
-    result.measurements = measurements;
+    result.measurements = resolvedMeasurements;
+    result.measurementsSnapshot = order.measurementsSnapshot || null;
 
     res.json(result);
   } catch (error) {

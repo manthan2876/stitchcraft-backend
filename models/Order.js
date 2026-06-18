@@ -87,6 +87,11 @@ const orderSchema = new mongoose.Schema(
       ref: 'Shop',
       required: true,
     },
+    measurementsSnapshot: {
+      shirt: { type: Object, default: null },
+      pant: { type: Object, default: null },
+      others: { type: String, default: '' },
+    },
   },
   {
     timestamps: true,
