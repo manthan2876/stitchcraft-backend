@@ -74,6 +74,12 @@ const orderSchema = new mongoose.Schema(
     },
     assignedKarigar: {
       type: mongoose.Schema.Types.ObjectId,
+      ref: 'Karigar',
+      default: null,
+    },
+    assignedMachine: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Machine',
       default: null,
     },
     shopId: {

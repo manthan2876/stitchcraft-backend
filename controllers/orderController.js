@@ -15,7 +15,7 @@ const findOrderScoped = async (id, shopId) => {
   const query = mongoose.Types.ObjectId.isValid(id)
     ? { _id: id, shopId }
     : { orderId: id, shopId };
-  return await Order.findOne(query).populate('assignedKarigar');
+  return await Order.findOne(query).populate('assignedKarigar').populate('assignedMachine');
 };
 
 // @desc    Create a new order
@@ -39,6 +39,7 @@ export const createOrder = async (req, res) => {
       asterQuantity,
       asterInventoryItem,
       assignedKarigar,
+      assignedMachine,
       measurementType,
       maapImageUrl,
     } = req.body;
@@ -123,6 +124,7 @@ export const createOrder = async (req, res) => {
       measurementType: measurementType || 'Maap',
       maapImageUrl: maapImageUrl || '',
       assignedKarigar: assignedKarigar || null,
+      assignedMachine: assignedMachine || null,
     });
 
     // Create associated Payment record
@@ -182,7 +184,7 @@ export const getOrders = async (req, res) => {
       filter.status = { $ne: 'Delivered' };
     }
 
-    const orders = await Order.find(filter).populate('assignedKarigar').sort({ deliveryDate: 1 });
+    const orders = await Order.find(filter).populate('assignedKarigar').populate('assignedMachine').sort({ deliveryDate: 1 });
 
     // Populate payment details
     const populatedOrders = [];
@@ -245,7 +247,7 @@ export const updateOrder = async (req, res) => {
       return res.status(404).json({ message: 'Order not found' });
     }
 
-    const { status, deliveryDate, price, fabric, needsAster, asterQuantity, asterInventoryItem, assignedKarigar, measurementType, maapImageUrl } = req.body;
+    const { status, deliveryDate, price, fabric, needsAster, asterQuantity, asterInventoryItem, assignedKarigar, assignedMachine, measurementType, maapImageUrl } = req.body;
 
     if (deliveryDate) {
       order.deliveryDate = deliveryDate;
@@ -266,6 +268,7 @@ export const updateOrder = async (req, res) => {
     if (measurementType !== undefined) order.measurementType = measurementType;
     if (maapImageUrl !== undefined) order.maapImageUrl = maapImageUrl;
     if (assignedKarigar !== undefined) order.assignedKarigar = assignedKarigar || null;
+    if (assignedMachine !== undefined) order.assignedMachine = assignedMachine || null;
 
     let statusChanged = false;
     let oldStatus = order.status;

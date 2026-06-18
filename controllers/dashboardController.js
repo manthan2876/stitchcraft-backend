@@ -3,6 +3,8 @@ import Customer from '../models/Customer.js';
 import Delivery from '../models/Delivery.js';
 import Payment from '../models/Payment.js';
 import Notification from '../models/Notification.js';
+import Karigar from '../models/Karigar.js';
+import Machine from '../models/Machine.js';
 
 // @desc    Get dashboard metrics, reminders, and recent orders
 // @route   GET /api/dashboard/stats
@@ -87,6 +89,79 @@ export const getDashboardStats = async (req, res) => {
       dailyStitching.push(daySum);
     }
 
+    // 9. Karigar performance metrics
+    const karigars = await Karigar.find({ shopId });
+    const karigarPerformance = [];
+
+    for (let k of karigars) {
+      const kOrders = await Order.find({ assignedKarigar: k._id, shopId });
+      let activeCount = 0;
+      let completedCount = 0;
+      let completedValue = 0;
+      let onTimeCompleted = 0;
+
+      for (let o of kOrders) {
+        if (['Ready', 'Delivered'].includes(o.status)) {
+          completedCount++;
+          completedValue += o.price || 0;
+          if (o.updatedAt <= o.deliveryDate) {
+            onTimeCompleted++;
+          }
+        } else {
+          activeCount++;
+        }
+      }
+
+      const onTimeRate = completedCount > 0
+        ? Math.round((onTimeCompleted / completedCount) * 100)
+        : 100;
+
+      karigarPerformance.push({
+        _id: k._id,
+        name: k.name,
+        specialization: k.specialization,
+        status: k.status,
+        activeCount,
+        completedCount,
+        completedValue,
+        onTimeRate
+      });
+    }
+
+    // Sort by value created/completed orders
+    karigarPerformance.sort((a, b) => b.completedValue - a.completedValue || b.completedCount - a.completedCount);
+
+    // 10. Machine performance metrics
+    const machines = await Machine.find({ shopId });
+    const machinePerformance = [];
+
+    for (let m of machines) {
+      const mOrders = await Order.find({ assignedMachine: m._id, shopId });
+      let activeCount = 0;
+      let completedCount = 0;
+
+      for (let o of mOrders) {
+        if (['Ready', 'Delivered'].includes(o.status)) {
+          completedCount++;
+        } else {
+          activeCount++;
+        }
+      }
+
+      machinePerformance.push({
+        _id: m._id,
+        name: m.name,
+        type: m.type,
+        status: m.status,
+        activeCount,
+        completedCount,
+        totalCount: mOrders.length
+      });
+    }
+
+    // Sort machines by usage (totalCount)
+    machinePerformance.sort((a, b) => b.totalCount - a.totalCount);
+
     res.json({
       todayDelivery: todayDeliveryCount,
       lateDelivery: lateDeliveryCount,
@@ -95,7 +170,9 @@ export const getDashboardStats = async (req, res) => {
       totalRevenue,
       recentOrders: recentOrdersWithPayments,
       reminders,
-      dailyStitching
+      dailyStitching,
+      karigarPerformance,
+      machinePerformance
     });
   } catch (error) {
     console.error('Dashboard stats error:', error);
