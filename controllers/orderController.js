@@ -5,6 +5,7 @@ import Delivery from '../models/Delivery.js';
 import Notification from '../models/Notification.js';
 import Measurement from '../models/Measurement.js';
 import Inventory from '../models/Inventory.js';
+import Transaction from '../models/Transaction.js';
 import mongoose from 'mongoose';
 
 // Statuses at which astar/lining is considered consumed (Stitching onwards)
@@ -16,6 +17,27 @@ const findOrderScoped = async (id, shopId) => {
     ? { _id: id, shopId }
     : { orderId: id, shopId };
   return await Order.findOne(query).populate('assignedKarigar').populate('assignedMachine');
+};
+
+const syncPaymentFromTransactions = async (orderId, shopId, price) => {
+  const transactions = await Transaction.find({ orderId, shopId });
+  const totalPaid = transactions.reduce((sum, tx) => {
+    if (tx.type === 'Payment') return sum + tx.amount;
+    if (tx.type === 'Refund') return sum - tx.amount;
+    return sum;
+  }, 0);
+
+  let payment = await Payment.findOne({ orderId, shopId });
+  if (!payment) {
+    payment = new Payment({
+      shopId,
+      orderId,
+      totalAmount: price,
+    });
+  }
+  payment.paidAmount = totalPaid;
+  await payment.save();
+  return payment;
 };
 
 // @desc    Create a new order
@@ -156,6 +178,18 @@ export const createOrder = async (req, res) => {
       paymentType: paymentType || 'Cash',
     });
 
+    // If advancePaid > 0, create a Transaction entry and sync payment details
+    if (advancePaid && Number(advancePaid) > 0) {
+      await Transaction.create({
+        shopId: req.user.shopId,
+        orderId: order._id,
+        amount: Number(advancePaid),
+        paymentType: paymentType || 'Cash',
+        type: 'Payment',
+      });
+      await syncPaymentFromTransactions(order._id, req.user.shopId, price);
+    }
+
     // Create associated Delivery record
     const delivery = await Delivery.create({
       shopId: req.user.shopId,
@@ -243,6 +277,7 @@ export const getOrderById = async (req, res) => {
     const measurements = order.customer
       ? await Measurement.findOne({ customerId: order.customer._id })
       : null;
+    const transactions = await Transaction.find({ orderId: order._id }).sort({ date: 1 });
 
     const hasSnapshot = order.measurementsSnapshot && 
       (order.measurementsSnapshot.shirt || order.measurementsSnapshot.pant || order.measurementsSnapshot.others);
@@ -253,6 +288,7 @@ export const getOrderById = async (req, res) => {
     result.delivery = delivery;
     result.measurements = resolvedMeasurements;
     result.measurementsSnapshot = order.measurementsSnapshot || null;
+    result.transactions = transactions;
 
     res.json(result);
   } catch (error) {
@@ -280,11 +316,7 @@ export const updateOrder = async (req, res) => {
     }
     if (price !== undefined) {
       order.price = price;
-      const payment = await Payment.findOne({ orderId: order._id });
-      if (payment) {
-        payment.totalAmount = price;
-        await payment.save();
-      }
+      await syncPaymentFromTransactions(order._id, req.user.shopId, price);
     }
     if (fabric !== undefined) order.fabric = fabric;
     if (needsAster !== undefined) order.needsAster = needsAster;
@@ -389,15 +421,17 @@ export const recordOrderPayment = async (req, res) => {
       return res.status(400).json({ message: 'Please provide a positive payment amount' });
     }
 
-    const payment = await Payment.findOne({ orderId: order._id });
-    if (!payment) {
-      return res.status(404).json({ message: 'Associated payment record not found' });
-    }
+    // Create the transaction entry instead of mutating paidAmount directly
+    await Transaction.create({
+      shopId: req.user.shopId,
+      orderId: order._id,
+      amount: Number(amount),
+      paymentType: paymentType || 'Cash',
+      type: 'Payment',
+    });
 
-    // Add paidAmount
-    payment.paidAmount += Number(amount);
-    if (paymentType) payment.paymentType = paymentType;
-    await payment.save();
+    // Dynamically calculate and sync payment records
+    const payment = await syncPaymentFromTransactions(order._id, req.user.shopId, order.price);
 
     // Create Notification
     await Notification.create({
@@ -445,6 +479,9 @@ export const deleteOrder = async (req, res) => {
 
     // Delete associated Notification records
     await Notification.deleteMany({ orderId: order._id, shopId: req.user.shopId });
+
+    // Delete associated Transaction records
+    await Transaction.deleteMany({ orderId: order._id, shopId: req.user.shopId });
 
     // Delete the Order itself
     await Order.deleteOne({ _id: order._id, shopId: req.user.shopId });

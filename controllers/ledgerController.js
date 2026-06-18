@@ -1,16 +1,28 @@
 import Payment from '../models/Payment.js';
 import Order from '../models/Order.js';
+import Transaction from '../models/Transaction.js';
 
 // @desc    Get payments summary (total sales, received payments, outstanding collections)
 // @route   GET /api/ledger/summary
 // @access  Private
 export const getLedgerSummary = async (req, res) => {
   try {
-    const payments = await Payment.find({ shopId: req.user.shopId });
+    const shopId = req.user.shopId;
 
-    const totalSales = payments.reduce((sum, p) => sum + (p.totalAmount || 0), 0);
-    const totalReceived = payments.reduce((sum, p) => sum + (p.paidAmount || 0), 0);
-    const totalOutstanding = payments.reduce((sum, p) => sum + (p.balanceAmount || 0), 0);
+    // Calculate totalSales from orders
+    const orders = await Order.find({ shopId });
+    const totalSales = orders.reduce((sum, o) => sum + (o.price || 0), 0);
+
+    // Calculate totalReceived from Transactions
+    const txs = await Transaction.find({ shopId });
+    const totalReceived = txs.reduce((sum, tx) => {
+      if (tx.type === 'Payment') return sum + tx.amount;
+      if (tx.type === 'Refund') return sum - tx.amount;
+      return sum;
+    }, 0);
+
+    // Calculate outstanding balance
+    const totalOutstanding = Math.max(0, totalSales - totalReceived);
 
     res.json({
       totalSales,
