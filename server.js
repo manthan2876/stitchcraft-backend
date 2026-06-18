@@ -41,6 +41,7 @@ import customerRoutes from './routes/customerRoutes.js';
 import orderRoutes from './routes/orderRoutes.js';
 import ledgerRoutes from './routes/ledgerRoutes.js';
 import deliveryRoutes from './routes/deliveryRoutes.js';
+import notificationRoutes from './routes/notificationRoutes.js';
 
 // Mount routes
 app.use('/api/auth', authRoutes);
@@ -50,6 +51,7 @@ app.use('/api/customers', customerRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/ledger', ledgerRoutes);
 app.use('/api/deliveries', deliveryRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
