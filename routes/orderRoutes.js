@@ -4,13 +4,17 @@ import {
   createOrder,
   getOrders,
   getOrderById,
+  getOrderByIdPublic,
   updateOrder,
   recordOrderPayment,
   deleteOrder,
 } from '../controllers/orderController.js';
 import { protect } from '../middleware/authMiddleware.js';
 
-router.use(protect); // Secure all routes in this module
+// Public guest invoice details route
+router.get('/public/:id', getOrderByIdPublic);
+
+router.use(protect); // Secure remaining routes in this module
 
 router.route('/')
   .post(createOrder)

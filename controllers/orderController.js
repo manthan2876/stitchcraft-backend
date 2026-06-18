@@ -307,6 +307,51 @@ export const getOrderById = async (req, res) => {
   }
 };
 
+// @desc    Get specific order details for public guest invoice
+// @route   GET /api/orders/public/:id
+// @access  Public
+export const getOrderByIdPublic = async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id)
+      .populate('assignedKarigar')
+      .populate('assignedMachine')
+      .populate('asterInventoryItem')
+      .populate('customer');
+
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+
+    const payment = await Payment.findOne({ orderId: order._id });
+    const delivery = await Delivery.findOne({ orderId: order._id });
+    const measurements = order.customer
+      ? await Measurement.findOne({ customerId: order.customer._id })
+      : null;
+    const transactions = await Transaction.find({ orderId: order._id }).sort({ date: 1 });
+
+    const hasSnapshot = order.measurementsSnapshot && 
+      (order.measurementsSnapshot.shirt || order.measurementsSnapshot.pant || order.measurementsSnapshot.others);
+    const resolvedMeasurements = hasSnapshot ? order.measurementsSnapshot : measurements;
+
+    const costPrice = order.asterInventoryItem?.costPerUnit || 0;
+    const asterProfit = order.needsAster ? (order.asterSellingPrice - costPrice) * order.asterQuantity : 0;
+
+    const result = order.toJSON();
+    result.payment = payment;
+    result.delivery = delivery;
+    result.measurements = resolvedMeasurements;
+    result.measurementsSnapshot = order.measurementsSnapshot || null;
+    result.transactions = transactions;
+    result.asterProfit = asterProfit;
+    result.asterCostPrice = costPrice;
+
+    res.json(result);
+  } catch (error) {
+    console.error('Get public order by ID error:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // @desc    Update order active stage or details
 // @route   PUT /api/orders/:id
 // @access  Private
