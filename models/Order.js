@@ -98,6 +98,9 @@ const orderSchema = new mongoose.Schema(
   }
 );
 
+orderSchema.index({ shopId: 1, status: 1 });
+orderSchema.index({ shopId: 1, deliveryDate: 1 });
+
 // Auto-increment orderId starting around 901
 orderSchema.pre('save', async function () {
   if (this.isNew) {

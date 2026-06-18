@@ -38,6 +38,8 @@ const customerSchema = new mongoose.Schema(
   }
 );
 
+customerSchema.index({ shopId: 1, customerId: 1 });
+
 // Auto-increment customerId pre-save hook
 customerSchema.pre('save', async function () {
   if (this.isNew) {

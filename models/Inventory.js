@@ -39,6 +39,8 @@ const inventorySchema = new mongoose.Schema(
   }
 );
 
+inventorySchema.index({ shopId: 1, itemName: 1 });
+
 inventorySchema.pre('save', function () {
   if (this.quantity === 0) {
     this.status = 'Out of Stock';
