@@ -62,7 +62,50 @@ export const getKarigarById = async (req, res) => {
       return res.status(404).json({ message: 'Karigar not found' });
     }
 
-    res.json(karigar);
+    // Fetch orders assigned to this Karigar
+    const orders = await Order.find({ assignedKarigar: karigar._id, shopId: req.user.shopId })
+      .sort({ deliveryDate: 1 });
+
+    const activeOrders = [];
+    const completedOrders = [];
+    let totalValue = 0;
+    let completedValue = 0;
+    let onTimeCompleted = 0;
+
+    for (let o of orders) {
+      if (['Ready', 'Delivered'].includes(o.status)) {
+        completedOrders.push(o);
+        completedValue += o.price || 0;
+        
+        // On-time check: was it completed before or on the deliveryDate?
+        if (o.updatedAt <= o.deliveryDate) {
+          onTimeCompleted++;
+        }
+      } else {
+        activeOrders.push(o);
+      }
+      totalValue += o.price || 0;
+    }
+
+    const totalOrders = orders.length;
+    const completedCount = completedOrders.length;
+    const activeCount = activeOrders.length;
+    const onTimeRate = completedCount > 0 
+      ? Math.round((onTimeCompleted / completedCount) * 100) 
+      : 100; // Default to 100% if no completed orders
+
+    res.json({
+      karigar,
+      stats: {
+        totalOrders,
+        activeCount,
+        completedCount,
+        completedValue,
+        onTimeRate
+      },
+      activeOrders,
+      completedOrders: completedOrders.slice(0, 10)
+    });
   } catch (error) {
     console.error('Get karigar by ID error:', error);
     res.status(500).json({ message: error.message });
