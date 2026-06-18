@@ -10,9 +10,12 @@ export const getLedgerSummary = async (req, res) => {
   try {
     const shopId = req.user.shopId;
 
-    // Calculate totalSales from orders
-    const orders = await Order.find({ shopId });
-    const totalSales = orders.reduce((sum, o) => sum + (o.price || 0), 0);
+    // Calculate totalSales from orders (including lining selling price)
+    const orders = await Order.find({ shopId }).populate('asterInventoryItem');
+    const totalSales = orders.reduce((sum, o) => {
+      const asterPrice = o.needsAster ? (o.asterSellingPrice * o.asterQuantity) : 0;
+      return sum + (o.price || 0) + asterPrice;
+    }, 0);
 
     // Calculate totalReceived from Transactions
     const txs = await Transaction.find({ shopId });
@@ -29,13 +32,23 @@ export const getLedgerSummary = async (req, res) => {
     const expenses = await LedgerEntry.find({ shopId });
     const totalExpenses = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
 
-    // Calculate total fabric profit
-    const asterOrders = await Order.find({ shopId, needsAster: true }).populate('asterInventoryItem');
-    const totalFabricProfit = asterOrders.reduce((sum, o) => {
-      const cost = o.asterInventoryItem?.costPerUnit || 0;
-      const profit = (o.asterSellingPrice - cost) * o.asterQuantity;
-      return sum + (profit > 0 ? profit : 0);
-    }, 0);
+    // Calculate total fabric profit and wholesale fabric cost
+    let totalFabricProfit = 0;
+    let totalFabricCost = 0;
+
+    const ASTAR_DEDUCT_STATUSES = ['Stitching', 'Checking', 'Ready', 'Delivered'];
+    orders.forEach(o => {
+      if (o.needsAster) {
+        const cost = o.asterInventoryItem?.costPerUnit || 0;
+        const profit = (o.asterSellingPrice - cost) * o.asterQuantity;
+        if (profit > 0) {
+          totalFabricProfit += profit;
+        }
+        if (ASTAR_DEDUCT_STATUSES.includes(o.status)) {
+          totalFabricCost += cost * o.asterQuantity;
+        }
+      }
+    });
 
     res.json({
       totalSales,
@@ -43,9 +56,133 @@ export const getLedgerSummary = async (req, res) => {
       totalOutstanding,
       totalExpenses,
       totalFabricProfit,
+      totalFabricCost,
     });
   } catch (error) {
     console.error('Get ledger summary error:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get all journal entries (Sales, Payments, Material Cost, Expenses)
+// @route   GET /api/ledger/journal
+// @access  Private
+export const getJournalEntries = async (req, res) => {
+  try {
+    const shopId = req.user.shopId;
+    const { category, search } = req.query;
+
+    // 1. Ledger Entries (Rent, Salary, Restocks)
+    const ledgerEntries = await LedgerEntry.find({ shopId });
+    const journalLedger = ledgerEntries.map(e => ({
+      _id: e._id,
+      date: e.date,
+      type: 'Expense',
+      referenceId: e.referenceId || e._id,
+      description: e.description || `${e.category} Expense`,
+      amount: e.amount,
+      paymentMethod: 'Cash',
+      flow: 'Out',
+      category: e.category
+    }));
+
+    // 2. Transactions (Customer Payments / Refunds)
+    const txs = await Transaction.find({ shopId }).populate({
+      path: 'orderId',
+      select: 'orderId customerName'
+    });
+    const journalTxs = txs.map(tx => {
+      const order = tx.orderId || {};
+      return {
+        _id: tx._id,
+        date: tx.date,
+        type: tx.type === 'Payment' ? 'Payment' : 'Refund',
+        referenceId: order._id || tx.orderId,
+        description: tx.type === 'Payment'
+          ? `Payment received for ${order.orderId || 'Order'} (${order.customerName || 'Customer'})`
+          : `Refund issued for ${order.orderId || 'Order'}`,
+        amount: tx.amount,
+        paymentMethod: tx.paymentType || 'Cash',
+        flow: tx.type === 'Payment' ? 'In' : 'Out',
+        category: 'Payments'
+      };
+    });
+
+    // 3. Orders (Sales Bookings)
+    const orders = await Order.find({ shopId }).populate('asterInventoryItem');
+    const journalOrders = orders.map(o => {
+      const asterPrice = o.needsAster ? (o.asterSellingPrice * o.asterQuantity) : 0;
+      return {
+        _id: o._id,
+        date: o.date,
+        type: 'Sales',
+        referenceId: o._id,
+        description: `Order Booked: ${o.orderId} - ${o.apparelType} (${o.customerName})`,
+        amount: o.price + asterPrice,
+        paymentMethod: 'N/A',
+        flow: 'In',
+        category: 'Sales'
+      };
+    });
+
+    // 4. Material Consumption Cost
+    const ASTAR_DEDUCT_STATUSES = ['Stitching', 'Checking', 'Ready', 'Delivered'];
+    const journalConsumption = [];
+    orders.forEach(o => {
+      if (o.needsAster && o.asterQuantity > 0 && ASTAR_DEDUCT_STATUSES.includes(o.status)) {
+        const costPrice = o.asterInventoryItem?.costPerUnit || 0;
+        const totalCost = costPrice * o.asterQuantity;
+        if (totalCost > 0) {
+          journalConsumption.push({
+            _id: o._id + '-cost',
+            date: o.date,
+            type: 'Material Consumption',
+            referenceId: o._id,
+            description: `Lining Consumed: ${o.asterQuantity} ${o.asterInventoryItem?.unit || 'units'} of ${o.asterInventoryItem?.itemName || 'Material'} for ${o.orderId}`,
+            amount: totalCost,
+            paymentMethod: 'N/A',
+            flow: 'Out',
+            category: 'Material Cost'
+          });
+        }
+      }
+    });
+
+    // Combine all
+    let allEntries = [
+      ...journalLedger,
+      ...journalTxs,
+      ...journalOrders,
+      ...journalConsumption
+    ];
+
+    // Filter by Category matching
+    if (category && category !== 'All') {
+      allEntries = allEntries.filter(entry => {
+        if (category === 'Sales') return entry.type === 'Sales';
+        if (category === 'Payments') return entry.type === 'Payment' || entry.type === 'Refund';
+        if (category === 'Expenses') return entry.type === 'Expense';
+        if (category === 'Material Cost') return entry.type === 'Material Consumption';
+        return false;
+      });
+    }
+
+    // Filter by Search Query
+    if (search) {
+      const q = search.toLowerCase();
+      allEntries = allEntries.filter(entry => 
+        (entry.description || '').toLowerCase().includes(q) ||
+        (entry.category || '').toLowerCase().includes(q) ||
+        (entry.type || '').toLowerCase().includes(q)
+      );
+    }
+
+    // Sort descending chronologically
+    allEntries.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    res.json(allEntries);
+  } catch (error) {
+    console.error('Get journal entries error:', error);
     res.status(500).json({ message: error.message });
   }
 };
