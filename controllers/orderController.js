@@ -213,12 +213,19 @@ export const getOrderById = async (req, res) => {
       return res.status(404).json({ message: 'Order not found' });
     }
 
+    // Populate customer details on the retrieved order
+    await order.populate('customer');
+
     const payment = await Payment.findOne({ orderId: order._id });
     const delivery = await Delivery.findOne({ orderId: order._id });
+    const measurements = order.customer
+      ? await Measurement.findOne({ customerId: order.customer._id })
+      : null;
 
     const result = order.toJSON();
     result.payment = payment;
     result.delivery = delivery;
+    result.measurements = measurements;
 
     res.json(result);
   } catch (error) {
