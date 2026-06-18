@@ -34,10 +34,12 @@ app.get('/api/status', (req, res) => {
 // Import route modules
 import authRoutes from './routes/authRoutes.js';
 import dashboardRoutes from './routes/dashboardRoutes.js';
+import shopRoutes from './routes/shopRoutes.js';
 
 // Mount routes
 app.use('/api/auth', authRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/shops', shopRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

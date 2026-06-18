@@ -164,3 +164,38 @@ export const updateUserProfile = async (req, res) => {
   }
 };
 
+// @desc    Switch active shop and return new token
+// @route   PUT /api/auth/switch-shop/:id
+// @access  Private
+export const switchActiveShop = async (req, res) => {
+  try {
+    const shop = await Shop.findOne({ _id: req.params.id, ownerId: req.user._id });
+    if (!shop) {
+      return res.status(404).json({ message: 'Shop not found or access denied' });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    user.shopId = shop._id;
+    await user.save();
+
+    res.json({
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      avatar: user.avatar,
+      shopId: shop._id,
+      shopName: shop.shopName,
+      token: generateToken(user._id, shop._id), // return new token
+    });
+  } catch (error) {
+    console.error('Switch shop error:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
