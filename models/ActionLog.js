@@ -10,7 +10,7 @@ const actionLogSchema = new mongoose.Schema(
     action: {
       type: String,
       required: true,
-      enum: ['DOWNLOAD_DATA', 'DELETE_ALL_DATA', 'DELETE_ACCOUNT_REQUEST', 'REACTIVATE_ACCOUNT'],
+      enum: ['LOGIN', 'LOGOUT', 'UPDATE_PROFILE', 'IMPORT_DATA', 'DOWNLOAD_DATA', 'DELETE_ALL_DATA', 'DELETE_ACCOUNT_REQUEST', 'REACTIVATE_ACCOUNT'],
     },
     details: {
       type: String,

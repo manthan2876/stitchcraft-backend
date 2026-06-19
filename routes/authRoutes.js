@@ -11,6 +11,8 @@ import {
   deleteAllData,
   deleteAccountRequest,
   verifyPasswordOnly,
+  importAllData,
+  checkImportConflicts,
 } from '../controllers/authController.js';
 import { protect } from '../middleware/authMiddleware.js';
 
@@ -25,5 +27,7 @@ router.post('/verify-password', protect, verifyPasswordOnly);
 router.post('/account/download-data', protect, downloadAllData);
 router.post('/account/delete-all-data', protect, deleteAllData);
 router.post('/account/delete-account', protect, deleteAccountRequest);
+router.post('/account/check-conflicts', protect, checkImportConflicts);
+router.post('/account/import-data', protect, importAllData);
 
 export default router;
