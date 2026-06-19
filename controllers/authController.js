@@ -436,5 +436,32 @@ export const deleteAccountRequest = async (req, res) => {
   }
 };
 
+// @desc    Verify current password only
+// @route   POST /api/auth/verify-password
+// @access  Private
+export const verifyPasswordOnly = async (req, res) => {
+  try {
+    const { password } = req.body;
+    if (!password) {
+      return res.status(400).json({ message: 'Password is required' });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const isMatch = await user.matchPassword(password);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Incorrect password' });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Verify password error:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
 
 

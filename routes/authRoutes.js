@@ -10,6 +10,7 @@ import {
   downloadAllData,
   deleteAllData,
   deleteAccountRequest,
+  verifyPasswordOnly,
 } from '../controllers/authController.js';
 import { protect } from '../middleware/authMiddleware.js';
 
@@ -20,6 +21,7 @@ router.route('/profile')
   .put(protect, updateUserProfile);
 router.put('/switch-shop/:id', protect, switchActiveShop);
 router.put('/update-password', protect, updatePassword);
+router.post('/verify-password', protect, verifyPasswordOnly);
 router.post('/account/download-data', protect, downloadAllData);
 router.post('/account/delete-all-data', protect, deleteAllData);
 router.post('/account/delete-account', protect, deleteAccountRequest);
