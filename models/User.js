@@ -33,6 +33,21 @@ const userSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Shop',
     },
+    status: {
+      type: String,
+      enum: ['active', 'deleting'],
+      default: 'active',
+    },
+    deletionRequestedAt: {
+      type: Date,
+    },
+    deletionReason: {
+      type: String,
+    },
+    reactivated: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

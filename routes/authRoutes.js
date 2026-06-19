@@ -7,6 +7,9 @@ import {
   updateUserProfile,
   switchActiveShop,
   updatePassword,
+  downloadAllData,
+  deleteAllData,
+  deleteAccountRequest,
 } from '../controllers/authController.js';
 import { protect } from '../middleware/authMiddleware.js';
 
@@ -17,5 +20,8 @@ router.route('/profile')
   .put(protect, updateUserProfile);
 router.put('/switch-shop/:id', protect, switchActiveShop);
 router.put('/update-password', protect, updatePassword);
+router.post('/account/download-data', protect, downloadAllData);
+router.post('/account/delete-all-data', protect, deleteAllData);
+router.post('/account/delete-account', protect, deleteAccountRequest);
 
 export default router;

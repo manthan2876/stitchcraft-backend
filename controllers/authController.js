@@ -1,6 +1,18 @@
 import User from '../models/User.js';
 import Shop from '../models/Shop.js';
 import jwt from 'jsonwebtoken';
+import Customer from '../models/Customer.js';
+import Order from '../models/Order.js';
+import Delivery from '../models/Delivery.js';
+import Inventory from '../models/Inventory.js';
+import Karigar from '../models/Karigar.js';
+import LedgerEntry from '../models/LedgerEntry.js';
+import Machine from '../models/Machine.js';
+import Payment from '../models/Payment.js';
+import Measurement from '../models/Measurement.js';
+import Transaction from '../models/Transaction.js';
+import Notification from '../models/Notification.js';
+import ActionLog from '../models/ActionLog.js';
 
 // Generate JWT token including shopId in payload
 const generateToken = (id, shopId) => {
@@ -81,21 +93,50 @@ export const loginUser = async (req, res) => {
     // Find user by email and populate shop details
     const user = await User.findOne({ email }).populate('shopId');
 
-    // Validate password
-    if (user && (await user.matchPassword(password))) {
-      res.json({
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        avatar: user.avatar,
-        shopId: user.shopId ? user.shopId._id : null,
-        shopName: user.shopId ? user.shopId.shopName : '',
-        token: generateToken(user._id, user.shopId ? user.shopId._id : null),
-      });
-    } else {
-      res.status(401).json({ message: 'Invalid email or password' });
+    if (!user) {
+      return res.status(401).json({ message: 'Invalid email or password' });
     }
+
+    // Validate password
+    const isMatch = await user.matchPassword(password);
+    if (!isMatch) {
+      return res.status(401).json({ message: 'Invalid email or password' });
+    }
+
+    // Check account status and deletion requested date
+    if (user.status === 'deleting') {
+      const gracePeriodMs = 15 * 24 * 60 * 60 * 1000;
+      const timeSinceRequest = Date.now() - new Date(user.deletionRequestedAt).getTime();
+      
+      if (timeSinceRequest > gracePeriodMs) {
+        return res.status(401).json({ message: 'This account has been permanently deleted.' });
+      } else {
+        // Reactivate user since they logged in within the 15 days window with correct password!
+        user.status = 'active';
+        user.deletionRequestedAt = undefined;
+        user.deletionReason = undefined;
+        user.reactivated = true;
+        await user.save();
+
+        // Log the reactivation action
+        await ActionLog.create({
+          userId: user._id,
+          action: 'REACTIVATE_ACCOUNT',
+          details: 'Account successfully reactivated via login within 15-day grace period.',
+        });
+      }
+    }
+
+    res.json({
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      avatar: user.avatar,
+      shopId: user.shopId ? user.shopId._id : null,
+      shopName: user.shopId ? user.shopId.shopName : '',
+      token: generateToken(user._id, user.shopId ? user.shopId._id : null),
+    });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ message: error.message });
@@ -227,6 +268,170 @@ export const updatePassword = async (req, res) => {
     res.json({ message: 'Password updated successfully' });
   } catch (error) {
     console.error('Update password error:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Download all data as JSON
+// @route   POST /api/auth/account/download-data
+// @access  Private
+export const downloadAllData = async (req, res) => {
+  try {
+    const { password } = req.body;
+    if (!password) {
+      return res.status(400).json({ message: 'Password is required' });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const isMatch = await user.matchPassword(password);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Incorrect password' });
+    }
+
+    const shopId = user.shopId;
+    if (!shopId) {
+      return res.status(400).json({ message: 'No active shop selected' });
+    }
+
+    // Gather all data
+    const customers = await Customer.find({ shopId });
+    const orders = await Order.find({ shopId });
+    const deliveries = await Delivery.find({ shopId });
+    const inventory = await Inventory.find({ shopId });
+    const karigars = await Karigar.find({ shopId });
+    const ledgerEntries = await LedgerEntry.find({ shopId });
+    const machines = await Machine.find({ shopId });
+    const payments = await Payment.find({ shopId });
+    const measurements = await Measurement.find({ shopId });
+    const transactions = await Transaction.find({ shopId });
+    const notifications = await Notification.find({ shopId });
+
+    // Log action
+    await ActionLog.create({
+      userId: user._id,
+      action: 'DOWNLOAD_DATA',
+      details: `Data exported for active shop ${shopId}`,
+    });
+
+    res.json({
+      exportedAt: new Date(),
+      user: {
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+      shopId,
+      customers,
+      orders,
+      deliveries,
+      inventory,
+      karigars,
+      ledgerEntries,
+      machines,
+      payments,
+      measurements,
+      transactions,
+      notifications,
+    });
+  } catch (error) {
+    console.error('Download data error:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Delete all active shop data
+// @route   POST /api/auth/account/delete-all-data
+// @access  Private
+export const deleteAllData = async (req, res) => {
+  try {
+    const { password } = req.body;
+    if (!password) {
+      return res.status(400).json({ message: 'Password is required' });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const isMatch = await user.matchPassword(password);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Incorrect password' });
+    }
+
+    const shopId = user.shopId;
+    if (!shopId) {
+      return res.status(400).json({ message: 'No active shop selected' });
+    }
+
+    // Delete all records of the active shop
+    await Customer.deleteMany({ shopId });
+    await Order.deleteMany({ shopId });
+    await Delivery.deleteMany({ shopId });
+    await Inventory.deleteMany({ shopId });
+    await Karigar.deleteMany({ shopId });
+    await LedgerEntry.deleteMany({ shopId });
+    await Machine.deleteMany({ shopId });
+    await Payment.deleteMany({ shopId });
+    await Measurement.deleteMany({ shopId });
+    await Transaction.deleteMany({ shopId });
+    await Notification.deleteMany({ shopId });
+
+    // Log action
+    await ActionLog.create({
+      userId: user._id,
+      action: 'DELETE_ALL_DATA',
+      details: `All data cleared for active shop ${shopId}`,
+    });
+
+    res.json({ message: 'All shop data deleted successfully' });
+  } catch (error) {
+    console.error('Delete all data error:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Request account deletion
+// @route   POST /api/auth/account/delete-account
+// @access  Private
+export const deleteAccountRequest = async (req, res) => {
+  try {
+    const { password, reason } = req.body;
+    if (!password) {
+      return res.status(400).json({ message: 'Password is required' });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const isMatch = await user.matchPassword(password);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Incorrect password' });
+    }
+
+    // Mark account for deletion (will last for 15 days)
+    user.status = 'deleting';
+    user.deletionRequestedAt = new Date();
+    user.deletionReason = reason || '';
+    user.reactivated = false;
+    await user.save();
+
+    // Log action
+    await ActionLog.create({
+      userId: user._id,
+      action: 'DELETE_ACCOUNT_REQUEST',
+      details: reason ? `Reason: ${reason}` : 'No reason provided',
+    });
+
+    res.json({ message: 'Account scheduled for deletion. Logging out...' });
+  } catch (error) {
+    console.error('Delete account request error:', error);
     res.status(500).json({ message: error.message });
   }
 };
