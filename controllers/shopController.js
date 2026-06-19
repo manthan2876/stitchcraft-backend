@@ -31,6 +31,7 @@ export const createShop = async (req, res) => {
       address: address || '',
       plan: plan || 'Free',
       ownerId: req.user._id,
+      email: req.user.email || '',
       isActive: true
     });
 
