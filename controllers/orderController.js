@@ -251,7 +251,11 @@ export const getOrders = async (req, res) => {
       filter.status = { $ne: 'Delivered' };
     }
 
-    const orders = await Order.find(filter).populate('assignedKarigar').populate('assignedMachine').sort({ deliveryDate: 1 });
+    const orders = await Order.find(filter)
+      .populate('assignedKarigar')
+      .populate('assignedMachine')
+      .populate('asterInventoryItem')
+      .sort({ deliveryDate: 1 });
 
     // Populate payment details
     const populatedOrders = [];
@@ -292,7 +296,7 @@ export const getOrderById = async (req, res) => {
       : null;
     const transactions = await Transaction.find({ orderId: order._id }).sort({ date: 1 });
 
-    const hasSnapshot = order.measurementsSnapshot && 
+    const hasSnapshot = order.measurementsSnapshot &&
       (order.measurementsSnapshot.shirt || order.measurementsSnapshot.pant || order.measurementsSnapshot.others);
     const resolvedMeasurements = hasSnapshot ? order.measurementsSnapshot : measurements;
 
@@ -337,7 +341,7 @@ export const getOrderByIdPublic = async (req, res) => {
       : null;
     const transactions = await Transaction.find({ orderId: order._id }).sort({ date: 1 });
 
-    const hasSnapshot = order.measurementsSnapshot && 
+    const hasSnapshot = order.measurementsSnapshot &&
       (order.measurementsSnapshot.shirt || order.measurementsSnapshot.pant || order.measurementsSnapshot.others);
     const resolvedMeasurements = hasSnapshot ? order.measurementsSnapshot : measurements;
 

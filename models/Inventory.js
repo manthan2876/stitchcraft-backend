@@ -12,6 +12,11 @@ const inventorySchema = new mongoose.Schema(
       required: [true, 'Please add item name'],
       trim: true,
     },
+    itemType: {
+      type: String,
+      required: [true, 'Please add item type'],
+      trim: true,
+    },
     quantity: {
       type: Number,
       required: [true, 'Please add quantity'],

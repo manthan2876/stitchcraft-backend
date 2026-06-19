@@ -7,10 +7,14 @@ import mongoose from 'mongoose';
 // @access  Private
 export const createInventoryItem = async (req, res) => {
   try {
-    const { itemName, quantity, unit, minQuantity, purchaseAmount, description, costPerUnit } = req.body;
+    const { itemName, itemType, quantity, unit, minQuantity, purchaseAmount, description, costPerUnit } = req.body;
 
     if (!itemName) {
       return res.status(400).json({ message: 'Item name is required' });
+    }
+
+    if (!itemType) {
+      return res.status(400).json({ message: 'Item type is required' });
     }
 
     const pAmount = purchaseAmount !== undefined ? Number(purchaseAmount) : 0;
@@ -18,6 +22,7 @@ export const createInventoryItem = async (req, res) => {
     const itemData = {
       shopId: req.user.shopId,
       itemName,
+      itemType,
       quantity: quantity !== undefined ? Number(quantity) : 0,
       unit: unit || 'meters',
       minQuantity: minQuantity !== undefined ? Number(minQuantity) : 10,
@@ -53,11 +58,17 @@ export const createInventoryItem = async (req, res) => {
 // @access  Private
 export const getInventory = async (req, res) => {
   try {
-    const search = req.query.search || '';
+    const { search, itemType, status } = req.query;
     const filter = { shopId: req.user.shopId };
 
     if (search) {
       filter.itemName = { $regex: search, $options: 'i' };
+    }
+    if (itemType) {
+      filter.itemType = itemType;
+    }
+    if (status) {
+      filter.status = status;
     }
 
     const inventory = await Inventory.find(filter).sort({ itemName: 1 });
@@ -97,9 +108,10 @@ export const updateInventoryItem = async (req, res) => {
       return res.status(404).json({ message: 'Inventory item not found' });
     }
 
-    const { itemName, quantity, unit, minQuantity, purchaseAmount, description, costPerUnit } = req.body;
+    const { itemName, itemType, quantity, unit, minQuantity, purchaseAmount, description, costPerUnit } = req.body;
 
     if (itemName) item.itemName = itemName;
+    if (itemType) item.itemType = itemType;
     if (quantity !== undefined) item.quantity = Number(quantity);
     if (unit) item.unit = unit;
     if (minQuantity !== undefined) item.minQuantity = Number(minQuantity);
